@@ -85,7 +85,7 @@ df["y"] = df["F"]/(df["Eo"]+m*df["Eg"]+(1+m)*df["Efw"])/1E6
 # df = df.set_index("Date")
 # df=df.dropna()
 
-print(df.head())
+# print(df.head())
 
 plt.scatter(df["x"], df["y"])
 plt.title("EBM linear")
@@ -93,29 +93,8 @@ plt.xlabel("We/(Eo+mEg)")
 plt.ylabel("F/(Eo+mEg)")
 plt.show()
 
-plt.scatter(df["t"], df["We"])
-plt.title("We x t")
-plt.xlabel("t")
-plt.ylabel("We")
-plt.show()
-
-plt.scatter(df["p"], df["We"])
-plt.title("We x p")
-plt.xlabel("p")
-plt.ylabel("We")
-plt.show()
-
-# syntax for 3-D projection
-ax = plt.axes(projection ='3d')
- 
-# plotting
-ax.scatter(df["t"], df["p"], df["We"])
-# ax.plot3D(x, y, z, 'green')
-ax.set_title('3D line plot')
-plt.show()
-
 train = df.copy()
-train = train.drop(["Np", "Gp", "Rp", "Wp", "Winj", "Bt", "Bo", "Bg", "Rs", "F", "Eo", "Eg", "Efw", "x", "y", "p", "dt"], axis=1)
+train = train.drop(["Np", "Gp", "Rp", "Wp", "Winj", "Bt", "Bo", "Bg", "Rs", "F", "Eo", "Eg", "Efw", "x", "y", "p", "dt", "dp"], axis=1)
 
 p=train["Press"].values
 we=train["We"].values
@@ -137,32 +116,54 @@ def func_we2(t, C, a):
     pmt = (((p[0]-p_med[1:])*dt[1:])/np.log(a*t[1:])).cumsum()
     return np.append(np.zeros(1), C*pmt[0:len(t)])
 
-print(train.head())
+##Aquífero Fetkovich
+def func_we3(t, Wei, J):
+    dt=t-np.roll(t,1)
+    p_med=(p+np.roll(p,1))/2
+    we3=np.zeros(len(p))
+    pa_med=np.zeros(len(p))
+    for i in range(len(p)):
+        if p[i] == p[0]:
+            dt[i] = 0
+            p_med[i] = p[0]
+            we3[i] = 0
+            pa_med[i] = p[0]
+        else:
+            dt[i]=t[i]-t[i-1]
+            p_med[i]=(p[i]+p[i-1])/2
+            we3[i]=we3[i-1]+(Wei/p[0])*(pa_med[i-1]-p_med[i])*(1-np.exp(-J*p[0]*dt[i]/Wei))
+            pa_med[i]=p[0]*(1-we3[i]/Wei)
+    return we3
+
+# print(train.head())
 
 # initialGuess=[1]
-initialGuess=[1,1]
+# initialGuess=[1,1]
+initialGuess=[8800000,2000]
 # popt,pcov = curve_fit(func_we1, t, we, initialGuess)
-popt,pcov = curve_fit(func_we2, t, we, initialGuess)
+# popt,pcov = curve_fit(func_we2, t, we, initialGuess)
+popt,pcov = curve_fit(func_we3, t, we, initialGuess)
 print(popt)
 
 # fittedData=func_we1(t, *popt)
-fittedData=func_we2(t, *popt)
+# fittedData=func_we2(t, *popt)
+fittedData=func_we3(t, *popt)
 r2 = r2_score(we, fittedData)
 print(r2)
 
 train["We_pred"]=fittedData
 
 plt.scatter(t, we, label="Data", color="blue")
-# plt.plot(t, fittedData, label=f"Fit: J = {popt[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
-plt.plot(t, fittedData, label=f"Fit: C = {popt[0]:0.2f} ; a = {popt[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
+plt.plot(t, fittedData, label=f"Fit: J = {popt[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
+# plt.plot(t, fittedData, label=f"Fit: C = {popt[0]:0.2f} ; a = {popt[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
 plt.legend()
 plt.xlabel("t")
 plt.ylabel("We")
 plt.show()
 
 plt.scatter(p, we, label="Data", color="blue")
-# plt.plot(p, fittedData, label=f"Fit: J = {popt[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
-plt.plot(p, fittedData, label=f"Fit: C = {popt[0]:0.2f} ; a = {popt[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
+plt.plot(p, fittedData, label=f"Fit: J = {popt[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
+# plt.plot(p, fittedData, label=f"Fit: C = {popt[0]:0.2f} ; a = {popt[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
 plt.legend()
 plt.xlabel("p")
 plt.ylabel("We")
@@ -177,4 +178,4 @@ ax.plot3D(df["t"], df["p"], train["We_pred"], 'green')
 ax.set_title('3D line plot')
 plt.show()
 
-train.to_excel('unisim_hist_match.xlsx', index=True)
+train.to_excel('unisim_hist_match.xlsx', index=False)
