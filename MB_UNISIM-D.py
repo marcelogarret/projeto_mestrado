@@ -22,12 +22,12 @@ from sklearn.metrics import r2_score
 
 df=pd.read_excel('unisim_hist.xlsx')
 df=df.drop(["Press_b", "Np_b", "Gp_b", "Wp_b", "Winj_b"], axis=1)
-# print(df.head())
+# print(df.head())!
 
 # print(df.dtypes)
 
 # Parametros escalares (MODSI)
-phi = 0.136
+phi = 0.13
 k = 77
 m = 0.0
 N = 130286000
@@ -38,8 +38,8 @@ cf = 5.3E-05
 pb = 210.3
 bob = 1.414
 co = 0.000162
-cw = 48E-6
-Swi = 0.17
+cw = 47.6E-06
+Swi = 0.35
 
 df["Rp"] = df["Gp"]/df["Np"]
 df["t"] = (df["Date"]-df["Date"].iloc[0]).astype("int64")/10**9/60/60/24
@@ -64,6 +64,7 @@ def func_rs(p, a, b):
     return np.append(rs1, rs2)
 
 p = df["Press"].values
+
 bo = func_bo(p, 0.0012, 1.1538)
 df["Bo"]=bo
 
@@ -77,7 +78,7 @@ df["Bt"]=df["Bo"]+(Rsi-df["Rs"])*df["Bg"]
 df["F"] = df["Np"]*(df["Bt"]+(df["Rp"]-Rsi)*df["Bg"])+(df["Wp"]-df["Winj"])*Bw
 df["Eo"] = df["Bt"]-df["Bt"].iloc[0]
 df["Eg"] = df["Bt"].iloc[0]*(df["Bg"]/df["Bg"].iloc[0]-1)
-df["Efw"] = df["Bt"].iloc[0]*((cf+cw*Swi)/(1-Swi))*df["dp"]
+df["Efw"] = df["Bt"].iloc[0]*((cf+cw*Swi)/(1-Swi))*df["p"]
 df["We"] = df["F"]-N*(df["Eo"]+m*df["Eg"]+(1+m)*df["Efw"])
 df["x"] = df["We"]/(df["Eo"]+m*df["Eg"]+(1+m)*df["Efw"])/1E6
 df["y"] = df["F"]/(df["Eo"]+m*df["Eg"]+(1+m)*df["Efw"])/1E6
@@ -85,13 +86,13 @@ df["y"] = df["F"]/(df["Eo"]+m*df["Eg"]+(1+m)*df["Efw"])/1E6
 # df = df.set_index("Date")
 # df=df.dropna()
 
-# print(df.head())
+#print(df)
 
-plt.scatter(df["x"], df["y"])
-plt.title("EBM linear")
-plt.xlabel("We/(Eo+mEg)")
-plt.ylabel("F/(Eo+mEg)")
-plt.show()
+#plt.scatter(df["x"], df["y"])
+#plt.title("EBM linear")
+#plt.xlabel("We/(Eo+mEg+(1+m)Efw)")
+#plt.ylabel("F/(Eo+mEg+(1+m)Efw)")
+#plt.show()
 
 train = df.copy()
 train = train.drop(["Np", "Gp", "Rp", "Wp", "Winj", "Bt", "Bo", "Bg", "Rs", "F", "Eo", "Eg", "Efw", "x", "y", "p", "dt", "dp"], axis=1)
@@ -137,45 +138,51 @@ def func_we3(t, Wei, J):
 
 # print(train.head())
 
-# initialGuess=[1]
-# initialGuess=[1,1]
-initialGuess=[8800000,2000]
-# popt,pcov = curve_fit(func_we1, t, we, initialGuess)
-# popt,pcov = curve_fit(func_we2, t, we, initialGuess)
-popt,pcov = curve_fit(func_we3, t, we, initialGuess)
-print(popt)
+initialGuess1=[10000]
+initialGuess2=[15,0.01]
+initialGuess3=[1E6,15]
+popt1,pcov1 = curve_fit(func_we1, t, we, initialGuess1)
+popt2,pcov2 = curve_fit(func_we2, t, we, initialGuess2)
+popt3,pcov3 = curve_fit(func_we3, t, we, initialGuess3)
+print(popt1, popt2, popt3)
 
-# fittedData=func_we1(t, *popt)
-# fittedData=func_we2(t, *popt)
-fittedData=func_we3(t, *popt)
-r2 = r2_score(we, fittedData)
-print(r2)
+fittedData1=func_we1(t, *popt1)
+fittedData2=func_we2(t, *popt2)
+fittedData3=func_we3(t, *popt3)
+r2_1 = r2_score(we, fittedData1)
+r2_2 = r2_score(we, fittedData2)
+r2_3 = r2_score(we, fittedData3)
+print(r2_1, r2_2, r2_3)
 
-train["We_pred"]=fittedData
+train["We_pred1"]=fittedData1
+train["We_pred2"]=fittedData2
+train["We_pred3"]=fittedData3
 
 plt.scatter(t, we, label="Data", color="blue")
-plt.plot(t, fittedData, label=f"Fit: J = {popt[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
-# plt.plot(t, fittedData, label=f"Fit: C = {popt[0]:0.2f} ; a = {popt[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
-plt.legend()
+plt.plot(t, fittedData1, label=f"Schilthuis: J = {popt1[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2_1:.2f}", color="red", linewidth=3)
+plt.plot(t, fittedData2, label=f"Hurst Mod.: C = {popt2[0]:0.2f} ; a = {popt2[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2_2:.2f}", color="green", linewidth=3)
+plt.plot(t, fittedData3, label=f"Fetkovich: Wei = {popt3[0]:0.2f} ; J = {popt3[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2_3:.2f}", color="orange", linewidth=3)
+plt.legend(fontsize='small')
 plt.xlabel("t")
 plt.ylabel("We")
 plt.show()
 
-plt.scatter(p, we, label="Data", color="blue")
-plt.plot(p, fittedData, label=f"Fit: J = {popt[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
-# plt.plot(p, fittedData, label=f"Fit: C = {popt[0]:0.2f} ; a = {popt[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2:.2f}", color="red", linewidth=3)
-plt.legend()
-plt.xlabel("p")
-plt.ylabel("We")
-plt.show()
+#plt.scatter(p, we, label="Data", color="blue")
+#plt.plot(p, fittedData1, label=f"Fit: J = {popt1[0]:0.2f} | R\N{SUPERSCRIPT TWO} = {r2_1:.2f}", color="red", linewidth=3)
+#plt.plot(p, fittedData2, label=f"Fit: C = {popt2[0]:0.2f} ; a = {popt2[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2_2:.2f}", color="green", linewidth=3)
+#plt.plot(p, fittedData3, label=f"Fit: Wei = {popt3[0]:0.2f} ; J = {popt3[1]:0.3f} | R\N{SUPERSCRIPT TWO} = {r2_3:.2f}", color="orange", linewidth=3)
+#plt.legend()
+#plt.xlabel("p")
+#plt.ylabel("We")
+#plt.show()
 
 # syntax for 3-D projection
-ax = plt.axes(projection ='3d')
- 
-# plotting
-ax.scatter(df["t"], df["p"], df["We"])
-ax.plot3D(df["t"], df["p"], train["We_pred"], 'green')
-ax.set_title('3D line plot')
-plt.show()
-
+#ax = plt.axes(projection ='3d')
+# 
+## plotting
+#ax.scatter(df["t"], df["p"], df["We"])
+#ax.plot3D(df["t"], df["p"], train["We_pred"], 'green')
+#ax.set_title('3D line plot')
+#plt.show()
+#
 train.to_excel('unisim_hist_match.xlsx', index=False)
