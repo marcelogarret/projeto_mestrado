@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+from scipy.optimize import minimize
 from sklearn.metrics import r2_score
 # from imblearn.over_sampling import RandomOverSampler
 # from sklearn.preprocessing import StandardScaler
@@ -21,12 +22,12 @@ from sklearn.metrics import r2_score
 # from sklearn.model_selection import TimeSeriesSplit
 
 df=pd.read_excel('unisim_hist.xlsx')
-df=df.drop(["Press_b", "Np_b", "Gp_b", "Wp_b", "Winj_b"], axis=1)
-# print(df.head())!
+# df=df.drop(["Press_b", "Np_b", "Gp_b", "Wp_b", "Winj_b"], axis=1)
+# print(df.head())
 
 # print(df.dtypes)
 
-# Parametros escalares (MODSI)
+## Parametros escalares (MODSI)
 phi = 0.13
 k = 77
 m = 0.0
@@ -95,13 +96,19 @@ df["y"] = df["F"]/(df["Eo"]+m*df["Eg"]+(1+m)*df["Efw"])/1E6
 #plt.show()
 
 train = df.copy()
-train = train.drop(["Np", "Gp", "Rp", "Wp", "Winj", "Bt", "Bo", "Bg", "Rs", "F", "Eo", "Eg", "Efw", "x", "y", "p", "dt", "dp"], axis=1)
+train = train.drop(["Gp", "Bt", "Bo", "Bg", "Rs", "F", "Eo", "Eg", "Efw", "x", "y", "p", "dt", "dp"], axis=1)
 
 p=train["Press"].values
 we=train["We"].values
 t=train["t"].values
+npp=train["Np"].values
+rp=train["Rp"].values
+wp=train["Wp"].values
+winj=train["Winj"].values
 we[0]=0
 we[1]=0
+rp[0]=0
+rp[1]=0
 
 ##Aquífero Schilthuis
 def func_we1(t, J):
@@ -136,7 +143,7 @@ def func_we3(t, Wei, J):
             pa_med[i]=p[0]*(1-we3[i]/Wei)
     return we3
 
-# print(train.head())
+print(train.head())
 
 initialGuess1=[10000]
 initialGuess2=[15,0.01]
@@ -185,4 +192,51 @@ plt.show()
 #ax.set_title('3D line plot')
 #plt.show()
 #
+
+#Otimização
+
+p_prev=np.zeros(len(t))
+we_prev=np.zeros(len(t))
+pimt=np.zeros(len(t))
+
+def f_sch(pn, i):
+    pmed=(p[i-1]+pn)/2
+    pimt[i]=pimt[i-1]+(p[0]-pmed)*(t[i]-t[i-1])
+    Sch=popt1[0]*pimt[i]
+    return Sch
+
+def f_ebm(pn, i):
+    Bo=bob+co*bob*(pb-pn)
+    Bg=1.40676*pn**(-1.04229)
+    F=npp[i]*(Bo+(rp[i]-Rsi)*Bg)+(wp[i]-winj[i])*Bw
+    Eo=Bo-bo[0]
+    Efw=bo[0]*((cf+cw*Swi)/(1-Swi))*(p[0]-pn)
+    EBM=F-N*(Eo+Efw)
+    return EBM
+
+for i in range(len(t)):
+    if p[i] == p[0]:
+        p_prev[i]=p[0]
+        we_prev[i]=0
+        pimt[i]=0
+    else:
+        pn=p[i-1]
+        def f_obj(pn):
+            Aquif=f_sch(pn, i)
+            EBM=f_ebm(pn, i)
+            return(EBM-Aquif)
+        result=f_obj(pn)
+        const = {'type':'eq', 'fun': f_obj}
+        result=minimize(f_obj, pn, constraints=const)
+        p_prev[i]=result.x[0]
+    
+plt.scatter(t, p, label="Data", color="blue")
+plt.plot(t, p_prev, label="Fit", color="red", linewidth=3)
+plt.plot(t, df["Press_b"], label="Benchmark", color="black", linewidth=2, linestyle='--')
+plt.legend(fontsize='small')
+plt.xlabel("t")
+plt.ylabel("p")
+plt.show()
+
+train["P_pred1"]=p_prev
 train.to_excel('unisim_hist_match.xlsx', index=False)
